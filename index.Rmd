@@ -1,0 +1,216 @@
+---
+title: "PTT-give Monitor"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(shinySignals)
+library(bubbles)
+library(dtplyr)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(PTTr)
+
+# devtools::install_github("jcheng5/bubbles")
+# devtools::install_github("hadley/shinySignals")
+
+# Access to PTT data stream
+source("data_stream.R", local = TRUE)
+con <- dbConnect(RSQLite::SQLite(), "pttdb.sqlite")
+
+# Reactive timer
+autoInvalidate <- reactiveTimer(20000)
+updaterInvalidate <- reactiveTimer(60000)
+
+# Update data to DB
+observe({
+  updaterInvalidate()
+  update_ptt_data(con, "give", 20)
+  # sudo apt-get install sqlite3 libsqlite3-dev
+  print("Updated")
+})
+
+# Read data from DB
+dt_reac <- reactive({
+  autoInvalidate()
+  dt <- load_ptt_give()
+  # randomly <- function(x) sample(xtfrm(x)) # shuffle rows
+  dt #%>% arrange(randomly(post_id))
+})
+```
+
+Sidebar {.sidebar}
+====================================================================
+
+### github.com/leoluyi
+
+The streaming data is a livestream of download logs from [PTT](https://www.ptt.cc/). The server code for that service is at
+[leoluyi/ptt_give_dashboard](https://github.com/leoluyi/ptt_give_dashboard).
+
+```{r}
+# Rate at which to flag high download traffic
+textInput("keywordInput", label = "Keyword")
+
+# Filter location
+textInput("locationInput", label = "Location")
+
+# Date
+dateRangeInput("dateRange", 
+               label = "Choose date range of post:",
+               start = Sys.Date() - 20,
+               end = Sys.Date()
+)
+
+# Maximum number of raw data rows to keep
+numericInput("maxrows", "Recent posts window:", 50, min = 1)
+```
+
+```{r reactives}
+dt_filter_reac <- reactive({
+  dt_filter <- dt_reac() # hard copy
+
+  if (input$keywordInput != "") {
+    reg <- input$keywordInput %>% 
+      str_split("[^\\w]+") %>% .[[1]] %>% paste(collapse="|")
+    dt_filter <- dt_filter %>% 
+      filter(item %>% str_detect(reg) | 
+               item_detail %>% str_detect(reg))
+  }
+  if (input$locationInput != "") {
+    reg <- input$locationInput %>% 
+      str_split("[^\\w]+") %>% .[[1]] %>% paste(collapse="|")
+    dt_filter <- dt_filter %>% 
+      filter(location %>% str_detect(reg))
+  }
+  if(!is.null(input$dateRange)) {
+    dt_filter <- dt_filter %>% 
+      filter(post_time >= as.POSIXct(input$dateRange[1], tz = "ROC")) %>% 
+      filter(post_time <= as.POSIXct(as.Date(input$dateRange[2])+1, tz = "ROC")-1)
+  }
+  
+  print(input$dateRange)
+  dt_filter
+})
+```
+
+Dashboard
+======================================================================
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Hit within 4 hours {.value-box}
+
+```{r}
+startTime <- as.numeric(Sys.time())
+numHit <- reactive({
+  
+  if (input$keywordInput != "") {
+    dt_filter <- dt_reac() %>% 
+      filter(post_time > Sys.time() - 4*60*60)
+    
+    reg <- input$keywordInput %>% 
+      str_split("[^\\w]+") %>% .[[1]] %>% paste(collapse="|")
+    dt_filter <- dt_filter %>% 
+      filter(item %>% str_detect(input$keywordInput) | 
+               item_detail %>% str_detect(reg))
+    
+    if (input$locationInput != "") {
+      reg <- input$locationInput %>% 
+        str_split("[^\\w]+") %>% .[[1]] %>% paste(collapse="|")
+      dt_filter <- dt_filter %>% 
+        filter(location %>% str_detect(reg))
+    }
+    n <- dt_filter %>% nrow()
+  } else {
+    n <- "0"
+  }
+  n
+})
+
+# Emit the download rate
+renderValueBox({
+  valueBox(
+    value = numHit() %>% as.integer(),
+    icon = "fa-area-chart",
+    color = if (numHit() >= 1) "warning" else "primary"
+  )
+})
+```
+
+
+### Chart: Number of posts
+
+```{r}
+renderPlot({
+  dt_filter_reac() %>% 
+    ggplot(aes(x = post_time)) +
+    geom_histogram(color = "white", bins = 30) +
+    # labs(title = "Number of posts") +
+    theme_light()
+})
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### {data-height=40}
+
+```{r}
+renderText({
+  autoInvalidate()
+  paste("(Last updated:", Sys.time(), ")")
+})
+```
+
+### Search Results
+
+```{r}
+# Shiny Reactivity Fails with data.tables
+# https://github.com/rstudio/shiny/issues/1017
+
+renderTable({
+  dt_filter_reac() %>% 
+    mutate(item = paste0("<a href='", post_url, "' target='_blank'>", 
+                         item, "</a>")) %>% 
+    select(item, location, post_time, author) %>%
+    mutate(post_time = strftime(post_time, format="%Y-%m-%d %H:%M:%S")) %>% 
+    head(input$maxrows)
+  # dt_filter_reac()
+}, 
+rownames = T, striped = T,
+sanitize.text.function = function(x) {x})
+# http://stackoverflow.com/a/21916320/3744499
+```
+
+
+Recent posts
+=========================================================================
+
+## Recent posts
+
+```{r}
+renderTable({
+  dt_filter_reac() %>% 
+    mutate(item = paste0("<a href='", post_url, "' target='_blank'>", 
+                         item, "</a>")) %>% 
+    mutate(post_time = strftime(post_time, format="%Y-%m-%d %H:%M:%S")) %>% 
+    select(item, location, post_time, author, post_text) %>%
+    head(input$maxrows)
+  # dt_filter_reac()
+}, 
+rownames = T, striped = T,
+sanitize.text.function = function(x) {x})
+# http://stackoverflow.com/a/21916320/3744499
+```
+

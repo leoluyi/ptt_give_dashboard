@@ -1,0 +1,61 @@
+---
+title: "Untitled"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+
+### Birthplace of R
+
+```{r}
+library(leaflet)
+m <- leaflet() %>%
+  addTiles() %>% 
+  addMarkers(lng=174.768, lat=-36.852, popup="The birthplace of R")
+m
+```
+
+### Data
+
+```{r}
+knitr::kable(iris)
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Value Boxes {.value-box}
+
+```{r}
+articles <- 204
+valueBox(articles, 
+         icon = "fa-pencil", 
+         caption = "Articles per Day")
+```
+
+### Gauges
+
+```{r}
+satisfaction <- 86
+gauge(satisfaction, min = 0, max = 100, symbol = '%', 
+  label = "Satisfaction", gaugeSectors(
+  success = c(80, 100), warning = c(40, 79), danger = c(0, 39)
+))
+```
+
+
+### Iris data
+
+```{r}
+library(ggplot2)
+qplot(Sepal.Length, Petal.Length, data = iris, color = Species)
+```

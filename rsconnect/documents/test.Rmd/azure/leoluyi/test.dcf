@@ -1,0 +1,10 @@
+name: test
+title: test
+account: leoluyi
+server: azure
+appId: 4
+bundleId: 8
+url: http://ubuntu16.japanwest.cloudapp.azure.com:80/rstudio-connect/content/4/
+when: 1494174389.61671
+asMultiple: FALSE
+asStatic: FALSE

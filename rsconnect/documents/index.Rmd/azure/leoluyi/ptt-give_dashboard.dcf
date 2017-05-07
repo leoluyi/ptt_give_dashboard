@@ -1,0 +1,10 @@
+name: ptt-give_dashboard
+title: PTT-give Dashboard
+account: leoluyi
+server: azure
+appId: 2
+bundleId: 7
+url: http://ubuntu16.japanwest.cloudapp.azure.com:80/rstudio-connect/ptt-give-dashboard/
+when: 1494172747.89246
+asMultiple: FALSE
+asStatic: FALSE
